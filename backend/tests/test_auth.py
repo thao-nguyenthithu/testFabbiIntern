@@ -133,3 +133,14 @@ async def test_expired_refresh_token_rejected(client: AsyncClient):
         json={"refresh_token": token},
     )
     assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_login_failed(client: AsyncClient):
+    """Test login with an unknown email."""
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "unknown@example.com", "password": "password123"},
+    )
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid email or password"

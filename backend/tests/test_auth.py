@@ -159,3 +159,10 @@ async def test_register_duplicate_email(client: AsyncClient, monkeypatch):
     await client.post("/api/v1/auth/register", json=user)
     response = await client.post("/api/v1/auth/register", json=user)
     assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_missing_token_returns_401(client: AsyncClient):
+    """Test that a request without a token gets 401, not 403."""
+    response = await client.get("/api/v1/todos")
+    assert response.status_code == 401

@@ -120,3 +120,84 @@ async def test_get_single_todo(client: AsyncClient):
     assert response.status_code == 200
     data = response.json()
     assert data["title"] == "Single Todo"
+
+
+@pytest.mark.asyncio
+async def test_get_other_user_todo(client: AsyncClient):
+    """Test that a user cannot get another user's todo."""
+    token_a = await get_auth_token(client, "owner_get@example.com")
+    token_b = await get_auth_token(client, "other_get@example.com")
+
+    # User A creates a todo
+    create_response = await client.post(
+        "/api/v1/todos",
+        json={"title": "A's Todo"},
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    todo_id = create_response.json()["id"]
+
+    # User B tries to get it
+    response = await client.get(
+        f"/api/v1/todos/{todo_id}",
+        headers={"Authorization": f"Bearer {token_b}"},
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_other_user_todo(client: AsyncClient):
+    """Test that a user cannot update another user's todo."""
+    token_a = await get_auth_token(client, "owner_update@example.com")
+    token_b = await get_auth_token(client, "other_update@example.com")
+
+    # User A creates a todo
+    create_response = await client.post(
+        "/api/v1/todos",
+        json={"title": "A's Todo"},
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    todo_id = create_response.json()["id"]
+
+    # User B tries to update it
+    response = await client.put(
+        f"/api/v1/todos/{todo_id}",
+        json={"title": "Hacked"},
+        headers={"Authorization": f"Bearer {token_b}"},
+    )
+    assert response.status_code == 404
+
+    # User A still sees the original title
+    response = await client.get(
+        f"/api/v1/todos/{todo_id}",
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    assert response.json()["title"] == "A's Todo"
+
+
+@pytest.mark.asyncio
+async def test_delete_other_user_todo(client: AsyncClient):
+    """Test that a user cannot delete another user's todo."""
+    token_a = await get_auth_token(client, "owner_delete@example.com")
+    token_b = await get_auth_token(client, "other_delete@example.com")
+
+    # User A creates a todo
+    create_response = await client.post(
+        "/api/v1/todos",
+        json={"title": "A's Todo"},
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    todo_id = create_response.json()["id"]
+
+    # User B tries to delete it
+    response = await client.delete(
+        f"/api/v1/todos/{todo_id}",
+        headers={"Authorization": f"Bearer {token_b}"},
+    )
+    assert response.status_code == 404
+
+    # User A can still get it
+    response = await client.get(
+        f"/api/v1/todos/{todo_id}",
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    assert response.status_code == 200

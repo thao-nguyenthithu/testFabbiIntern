@@ -1,7 +1,42 @@
 """Todo tests."""
 
+from fnmatch import fnmatch
+
 import pytest
 from httpx import AsyncClient
+
+from app.api.deps import get_redis
+from app.main import app
+
+
+class FakeRedis:
+    """In-memory Redis stand-in that actually stores cached values."""
+
+    def __init__(self):
+        self.store = {}
+
+    async def get(self, key):
+        return self.store.get(key)
+
+    async def set(self, key, value, ex=None):
+        self.store[key] = value
+
+    async def delete(self, key):
+        self.store.pop(key, None)
+
+    async def delete_pattern(self, pattern):
+        for key in [k for k in self.store if fnmatch(k, pattern)]:
+            del self.store[key]
+
+
+@pytest.fixture
+def fake_redis():
+    """Use FakeRedis for one test, then restore the default mock."""
+    redis = FakeRedis()
+    previous = app.dependency_overrides[get_redis]
+    app.dependency_overrides[get_redis] = lambda: redis
+    yield redis
+    app.dependency_overrides[get_redis] = previous
 
 
 async def get_auth_token(client: AsyncClient, email: str = "todo@example.com") -> str:
@@ -201,3 +236,55 @@ async def test_delete_other_user_todo(client: AsyncClient):
         headers={"Authorization": f"Bearer {token_a}"},
     )
     assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_todo_list_cache_invalidated(client: AsyncClient, fake_redis):
+    """Test that create, update and delete clear the cached todo list."""
+    token = await get_auth_token(client, "cache@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Load the list once so it is cached
+    await client.get("/api/v1/todos", headers=headers)
+
+    # Create: new todo appears in the list
+    create_response = await client.post(
+        "/api/v1/todos", json={"title": "New Todo"}, headers=headers
+    )
+    todo_id = create_response.json()["id"]
+    response = await client.get("/api/v1/todos", headers=headers)
+    assert [t["title"] for t in response.json()["items"]] == ["New Todo"]
+
+    # Update: new title appears in the list
+    await client.put(
+        f"/api/v1/todos/{todo_id}", json={"title": "Renamed"}, headers=headers
+    )
+    response = await client.get("/api/v1/todos", headers=headers)
+    assert [t["title"] for t in response.json()["items"]] == ["Renamed"]
+
+    # Delete: todo disappears from the list
+    await client.delete(f"/api/v1/todos/{todo_id}", headers=headers)
+    response = await client.get("/api/v1/todos", headers=headers)
+    assert response.json()["items"] == []
+
+
+@pytest.mark.asyncio
+async def test_todo_list_cache_per_user(client: AsyncClient, fake_redis):
+    """Test that a user never gets another user's cached todo list."""
+    token_a = await get_auth_token(client, "cache_a@example.com")
+    token_b = await get_auth_token(client, "cache_b@example.com")
+
+    # User A creates a todo and loads the list (cached)
+    await client.post(
+        "/api/v1/todos",
+        json={"title": "A's Todo"},
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    await client.get("/api/v1/todos", headers={"Authorization": f"Bearer {token_a}"})
+
+    # User B loads the list
+    response = await client.get(
+        "/api/v1/todos",
+        headers={"Authorization": f"Bearer {token_b}"},
+    )
+    assert response.json()["items"] == []

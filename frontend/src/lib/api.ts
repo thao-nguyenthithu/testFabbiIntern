@@ -27,7 +27,9 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    // A failed login also returns 401; let the login form show that error.
+    const isLoginRequest = error.config?.url === "/auth/login";
+    if (error.response?.status === 401 && !isLoginRequest) {
       localStorage.removeItem("access_token");
       localStorage.removeItem("refresh_token");
       window.location.href = "/login";

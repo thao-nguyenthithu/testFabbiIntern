@@ -3,6 +3,7 @@
 import pytest
 from httpx import AsyncClient
 from datetime import timedelta
+from unittest.mock import AsyncMock
 from app.core.security import create_access_token, create_refresh_token, verify_token
 
 
@@ -144,3 +145,17 @@ async def test_login_failed(client: AsyncClient):
     )
     assert response.status_code == 401
     assert response.json()["detail"] == "Invalid email or password"
+
+
+@pytest.mark.asyncio
+async def test_register_duplicate_email(client: AsyncClient, monkeypatch):
+    """Test that the database blocks a duplicate email."""
+    # Skip the email check, like two requests arriving at the same time
+    monkeypatch.setattr(
+        "app.api.v1.auth.get_user_by_email", AsyncMock(return_value=None)
+    )
+    user = {"email": "dup@example.com", "password": "password123"}
+
+    await client.post("/api/v1/auth/register", json=user)
+    response = await client.post("/api/v1/auth/register", json=user)
+    assert response.status_code == 400

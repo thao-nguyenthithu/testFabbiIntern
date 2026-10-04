@@ -32,4 +32,8 @@ docs/ANSWER_KEY.md
 .DS_Store
 Thumbs.db
 
-docs/
+# Claude Code
+.claude/
+
+# Understand Anything (knowledge graph)
+.ua/

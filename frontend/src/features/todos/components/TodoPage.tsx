@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, LogOut } from "lucide-react";
+import { Plus, LogOut, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -10,8 +10,15 @@ import { useAuth } from "@/features/auth/hooks/useAuth";
 
 export function TodoPage() {
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const { data, isLoading, error } = useTodos();
+  const [page, setPage] = useState(1);
+  const { data, isLoading, error } = useTodos(page);
   const { user, logout } = useAuth();
+
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / data.size)) : 1;
+  // Go back a page when the last todo of the last page is deleted
+  if (data && page > totalPages) {
+    setPage(totalPages);
+  }
 
   return (
     <div className="min-h-screen bg-muted/40">
@@ -59,7 +66,35 @@ export function TodoPage() {
 
             {data && data.total > 0 && (
               <div className="mt-4 text-center text-sm text-muted-foreground">
-                Showing {data.items.length} of {data.total} todos
+                Showing {(data.page - 1) * data.size + 1}–
+                {(data.page - 1) * data.size + data.items.length} of {data.total}{" "}
+                todos
+              </div>
+            )}
+
+            {totalPages > 1 && (
+              <div className="mt-4 flex items-center justify-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(page - 1)}
+                  disabled={page <= 1}
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {page} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(page + 1)}
+                  disabled={page >= totalPages}
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
               </div>
             )}
           </CardContent>

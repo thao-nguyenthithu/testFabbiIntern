@@ -288,3 +288,28 @@ async def test_todo_list_cache_per_user(client: AsyncClient, fake_redis):
         headers={"Authorization": f"Bearer {token_b}"},
     )
     assert response.json()["items"] == []
+
+
+@pytest.mark.asyncio
+async def test_update_completed_back_to_false(client: AsyncClient):
+    """Test that completed can be changed from true back to false."""
+    token = await get_auth_token(client, "toggle@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Create a todo and mark it completed
+    create_response = await client.post(
+        "/api/v1/todos", json={"title": "Toggle Todo"}, headers=headers
+    )
+    todo_id = create_response.json()["id"]
+    await client.put(
+        f"/api/v1/todos/{todo_id}", json={"completed": True}, headers=headers
+    )
+
+    # Mark it not completed
+    await client.put(
+        f"/api/v1/todos/{todo_id}", json={"completed": False}, headers=headers
+    )
+
+    # Get it again
+    response = await client.get(f"/api/v1/todos/{todo_id}", headers=headers)
+    assert response.json()["completed"] is False

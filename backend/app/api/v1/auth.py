@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_redis
@@ -10,9 +11,14 @@ from app.schemas.user import (
     RefreshTokenRequest,
     TokenResponse,
     UserCreate,
+    UserLogin,
     UserResponse,
 )
-from app.services.auth_service import create_user, get_user_by_email
+from app.services.auth_service import (
+    authenticate_user,
+    create_user,
+    get_user_by_email,
+)
 
 router = APIRouter()
 
@@ -32,7 +38,15 @@ async def register(
             detail="Email already registered",
         )
 
-    user = await create_user(db, user_data)
+    try:
+        user = await create_user(db, user_data)
+    except IntegrityError:
+        # Another request registered the same email at the same time
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered",
+        )
 
     access_token = create_access_token(data={"sub": str(user.id)})
     refresh_token = create_refresh_token(data={"sub": str(user.id)})
@@ -45,24 +59,16 @@ async def register(
 
 @router.post("/login", response_model=TokenResponse)
 async def login(
-    user_data: UserCreate,
+    user_data: UserLogin,
     db: AsyncSession = Depends(get_db),
 ):
     """Authenticate user and return tokens."""
-    user = await get_user_by_email(db, user_data.email)
+    user = await authenticate_user(db, user_data.email, user_data.password)
 
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User with this email not found",
-        )
-
-    from app.core.security import verify_password
-
-    if not verify_password(user_data.password, user.hashed_password):
-        raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect password",
+            detail="Invalid email or password",
         )
 
     access_token = create_access_token(data={"sub": str(user.id)})

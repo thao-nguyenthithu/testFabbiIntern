@@ -2,6 +2,8 @@
 
 import pytest
 from httpx import AsyncClient
+from datetime import timedelta
+from app.core.security import create_access_token, create_refresh_token, verify_token
 
 
 @pytest.mark.asyncio
@@ -75,3 +77,59 @@ async def test_logout(client: AsyncClient):
     )
     assert response.status_code == 200
     assert response.json()["message"] == "Successfully logged out"
+
+
+@pytest.mark.asyncio
+async def test_expired_token_rejected(client: AsyncClient):
+    """Test that an expired access token is rejected."""
+    # Register and get user id
+    reg_response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "expired@example.com", "password": "password123"},
+    )
+    user_id = verify_token(reg_response.json()["access_token"])["sub"]
+
+    # Get current user with expired token
+    token = create_access_token({"sub": user_id}, timedelta(minutes=-1))
+    response = await client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_refresh_token_rejected_as_access_token(client: AsyncClient):
+    """Test that a refresh token cannot be used as an access token."""
+    # Register and get refresh token
+    reg_response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "wrongtype@example.com", "password": "password123"},
+    )
+    token = reg_response.json()["refresh_token"]
+
+    # Get todos with refresh token
+    response = await client.get(
+        "/api/v1/todos",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_expired_refresh_token_rejected(client: AsyncClient):
+    """Test that an expired refresh token is rejected."""
+    # Register and get user id
+    reg_response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "expiredrefresh@example.com", "password": "password123"},
+    )
+    user_id = verify_token(reg_response.json()["access_token"])["sub"]
+
+    # Refresh with expired token
+    token = create_refresh_token({"sub": user_id}, timedelta(days=-1))
+    response = await client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": token},
+    )
+    assert response.status_code == 401

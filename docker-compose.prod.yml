@@ -1,0 +1,12 @@
+# Production overrides: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+services:
+  postgres:
+    ports: !reset []
+
+  redis:
+    ports: !reset []
+
+  backend:
+    # No code mount and no --reload: run the code baked into the image (Dockerfile CMD)
+    volumes: !reset []
+    command: !reset null

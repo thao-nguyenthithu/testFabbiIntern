@@ -340,3 +340,20 @@ async def test_partial_update_keeps_description(client: AsyncClient):
     # Get it again
     response = await client.get(f"/api/v1/todos/{todo_id}", headers=headers)
     assert response.json()["description"] == "Keep me"
+
+
+@pytest.mark.asyncio
+async def test_get_todos_newest_first(client: AsyncClient):
+    """Test that the todo list is ordered newest first."""
+    token = await get_auth_token(client, "order@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    for title in ["First", "Second", "Third"]:
+        await client.post("/api/v1/todos", json={"title": title}, headers=headers)
+
+    response = await client.get("/api/v1/todos", headers=headers)
+    assert [t["title"] for t in response.json()["items"]] == [
+        "Third",
+        "Second",
+        "First",
+    ]

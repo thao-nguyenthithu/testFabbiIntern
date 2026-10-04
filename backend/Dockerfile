@@ -1,17 +1,20 @@
-FROM python:3.12-slim
+# Build stage: install Python dependencies into a virtualenv
+FROM python:3.12-slim AS builder
 
-WORKDIR /app
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Runtime stage: only the virtualenv and application code
+FROM python:3.12-slim
+
+ENV PATH="/opt/venv/bin:$PATH"
+
+WORKDIR /app
+
+COPY --from=builder /opt/venv /opt/venv
 COPY . .
 
 # Run migrations and start server
